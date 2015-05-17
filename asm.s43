@@ -1,0 +1,230 @@
+#include "msp430.h"                     ; #define controlled include file
+
+#define SLEEP_TIME 4500
+#define IR_VCC 1
+#define IR_RX 2
+#define RF_TX 4
+
+#define STATE R4
+#define TIMES R5
+#define TOTAL R6
+#define PREV1 R7
+#define SCODE R8
+#define SLEEP 0
+#define PROBE 2
+#define SEND 4
+#define FOLLOW 6
+
+SMUL EQU 37
+
+        NAME    main                    ; module name
+
+        PUBLIC  main                    ; make the main label vissible
+                                        ; outside this module
+        ORG     0FFFEh
+        DC16    init                    ; set reset vector to 'init' label
+        ORG     0FFF2h                  ;
+        DC16    TA0_ISR                 ; Timer_A0 Vector
+
+        RSEG    CSTACK                  ; pre-declaration of segment
+        RSEG    CODE                    ; place program in 'CODE' segment
+
+init:   MOV     #SFE(CSTACK), SP        ; set up stack
+
+main:   NOP                             ; main program
+        MOV.W   #WDTPW+WDTHOLD,&WDTCTL  ; Stop watchdog timer
+        
+        MOV.B   #XCAP_1+LFXT1S_2+XT2S_0,&BCSCTL3  ; BCSCTL3 = XCAP_1 + LFXT1S_2 + XT2S_0
+        MOV.B   #0,&P1SEL               ; P1SEL = 0;
+  
+        BIS.B   #5h,&P1DIR              ; P1.0 & P1.2 output
+ 
+        and.b   #~RF_TX,&P1OUT          ; RF_TX = 0;
+
+        MOV.W   #CCIE,&CCTL0            ; CCTL0 = CCIE;
+        
+        CALL    #sleep
+        
+        JMP $                           ; jump to current location '$'
+                                        ; (endless loop)
+                                        
+sleep:  MOV     #TASSEL_1+MC_1,&TACTL   ; ACLK, upmode
+        MOV     #0h,&TAR                ; TAR = 0;
+        MOV     #SLEEP_TIME-1,&CCR0     ; CCR0 = SLEEP_TIME - 1;
+
+        MOV     #SLEEP,STATE            ; state = SLEEP;
+        and.b   #~IR_VCC,&P1OUT         ; IR_VCC = 0;
+
+        BIS     #GIE+CPUOFF+SCG0+SCG1,SR ; Enter LPM3
+        RET
+        
+probe:
+        add.w   #400-1,&CCR0            ; CCR0 counts to 400
+        MOV     #PROBE,STATE            ; state = PROBE;
+        mov     #0h,TIMES
+        bis.b   #IR_VCC,&P1OUT          ; IR_VCC = 1;
+        RET
+
+send:
+        MOV     #SEND,STATE             ; state = SEND;
+        mov     #0h,TOTAL
+        mov     #0h,TIMES
+        ret
+      
+follow:
+        MOV     #FOLLOW,STATE             ; state = SEND;
+        mov     #0h,TOTAL
+        mov     #0h,TIMES
+        mov.b   &P1IN,PREV1
+        and     #IR_RX,PREV1
+        ret
+        
+STATE_SLEEP:
+        BIC     #CPUOFF+SCG1+SCG0,0(SP)    ; exit LPM3
+        MOV     #TASSEL_2+MC_2,&TACTL   ; SMCLK, Continous up
+        mov     #0h,TOTAL
+        call    #probe
+        reti
+STATE_PROBE:
+        add.w   #100-1,&CCR0            ; CCR0 counts to 100
+        inc     TIMES
+        
+        cmp     #20,TIMES               ; 20 periods
+        jne     state_probe_2
+        
+        cmp     #0h,TOTAL
+        jne     state_probe_3
+        
+        call    #sleep                  ; sleep
+        jmp     probe_end
+        
+state_probe_3:                          ; next probe
+        add.w   #300,&CCR0              ; CCR0 counts to 300
+        dec     TOTAL
+        mov     #0h,TIMES
+        bis.b   #IR_VCC,&P1OUT          ; IR_VCC = 1;
+        jmp     probe_end
+        
+state_probe_2:
+        cmp     #20-1,TIMES
+        jne     state_probe_1
+        
+        and.b   #~IR_VCC,&P1OUT         ; IR_VCC = 0, probe failed
+        jmp     probe_end
+
+state_probe_1:
+        bit.b   #IR_RX,&P1IN            ; if (IR_RX == 0)
+        jc      probe_end               ;
+        call    #send                   ; recv
+probe_end:
+        reti
+              
+STATE_SEND:
+        xor.b   #RF_TX,&P1OUT
+        
+        cmp     #4,TIMES
+        jne     state_send_2
+        mov     #30*SMUL,R15
+        jmp     state_send_0
+        
+state_send_2:        
+        bit     #1,TIMES
+        jc      state_send_1
+        mov     #14*SMUL,R15
+        jmp     state_send_0
+        
+state_send_1:
+        cmp     #1,TIMES
+        jeq     state_send_3
+        cmp     #3,TIMES
+        jne     state_send_4        
+state_send_3:        
+        mov     #8*SMUL,R15
+        jmp     state_send_0
+        
+state_send_4:
+        cmp     #5,TIMES
+        jne     state_send_5
+        mov     #61*SMUL,R15
+        jmp     state_send_0
+
+state_send_5:
+        cmp     #7,TIMES
+        jne     state_send_6
+        mov     #0xC0A7,SCODE
+        jmp     state_send_7
+state_send_6:
+        cmp     #7+32,TIMES
+        jne     state_send_9
+        mov     #0x2652,SCODE
+        jmp     state_send_7
+state_send_9:
+        rla     SCODE
+state_send_7:
+
+        bit     #8000h,SCODE
+        jz      state_send_8
+        mov     #21*SMUL,R15
+        jmp     state_send_0
+       
+state_send_8:
+        mov     #10*SMUL,R15
+
+state_send_0:
+        add     R15,&CCR0
+        
+        inc     TIMES
+        cmp     #72,TIMES
+        jne     state_send_end
+        call    #follow
+state_send_end:
+        reti
+STATE_FOLLOW:
+        add.w   #470-1,&CCR0
+        inc     TIMES
+        
+        mov.b   &P1IN,R15 
+        and     #IR_RX,R15
+        
+        cmp     #100h,TIMES
+        jne     state_follow_4
+
+        mov     #100h,TOTAL             ; no singal, go to probe
+        call    #probe
+        jmp     state_follow_end
+
+state_follow_4:   
+        cmp     R15,PREV1
+        jeq     state_follow_1
+        
+        cmp     #0,R15
+        jeq     state_follow_1
+
+        mov     #0,TIMES
+        inc     TOTAL
+        cmp     #5,TOTAL
+        jne     state_follow_3
+        
+        mov     #100h,TOTAL             ; finish, go to probe
+        call    #probe
+        jmp     state_follow_end
+                
+state_follow_3:     
+        bis.b   #RF_TX,&P1OUT           ; RF_TX = 1
+        jmp     state_follow_2
+        
+state_follow_1:
+        and.b   #~RF_TX,&P1OUT          ; RF_TX = 0
+        
+state_follow_2:
+        mov     R15,PREV1               ; save current state        
+
+state_follow_end:        
+        reti
+TA0_ISR:
+        add.w   STATE,PC                ; Add Timer_A offset vector
+        JMP     STATE_SLEEP
+        JMP     STATE_PROBE
+        JMP     STATE_SEND
+        JMP     STATE_FOLLOW
+        END
