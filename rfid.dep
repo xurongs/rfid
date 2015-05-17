@@ -9,12 +9,21 @@
       <file>$PROJ_DIR$\Debug\Exe\rfid.d43</file>
       <file>$PROJ_DIR$\asm.s43</file>
       <file>$PROJ_DIR$\Debug\List\rfid.xlink.log</file>
-      <file>$TOOLKIT_DIR$\inc\msp430g2001.h</file>
       <file>$TOOLKIT_DIR$\inc\msp430.h</file>
+      <file>$TOOLKIT_DIR$\config\linker\lnk430g2001.xcl</file>
       <file>$PROJ_DIR$\Debug\Obj\asm.r43</file>
       <file>$PROJ_DIR$\Debug\Exe\rfid.txt</file>
-      <file>$TOOLKIT_DIR$\config\linker\lnk430g2001.xcl</file>
+      <file>$TOOLKIT_DIR$\inc\msp430g2001.h</file>
     </outputs>
+    <file>
+      <name>[ROOT_NODE]</name>
+      <outputs>
+        <tool>
+          <name>XLINK</name>
+          <file> 0 2</file>
+        </tool>
+      </outputs>
+    </file>
     <file>
       <name>$PROJ_DIR$\Debug\Exe\rfid.d43</name>
       <outputs>
@@ -26,7 +35,7 @@
       <inputs>
         <tool>
           <name>XLINK</name>
-          <file> 7 5</file>
+          <file> 4 5</file>
         </tool>
       </inputs>
     </file>
@@ -41,25 +50,16 @@
       <inputs>
         <tool>
           <name>A430</name>
-          <file> 4 3</file>
+          <file> 3 7</file>
         </tool>
       </inputs>
-    </file>
-    <file>
-      <name>[ROOT_NODE]</name>
-      <outputs>
-        <tool>
-          <name>XLINK</name>
-          <file> 2 0</file>
-        </tool>
-      </outputs>
     </file>
     <file>
       <name>$PROJ_DIR$\Debug\Exe\rfid.txt</name>
       <inputs>
         <tool>
           <name>XLINK</name>
-          <file> 7 5</file>
+          <file> 4 5</file>
         </tool>
       </inputs>
     </file>

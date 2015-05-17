@@ -180,12 +180,17 @@ state_send_0:
 state_send_end:
         reti
 STATE_FOLLOW:
-        add.w   #470-1,&CCR0
+        add.w   #100-1,&CCR0
         inc     TIMES
         
         mov.b   &P1IN,R15 
         and     #IR_RX,R15
         
+        cmp     #1h,TIMES
+        jne     state_follow_5
+        add.w   #370-1,&CCR0            ; pull down 470 period
+        
+state_follow_5:
         cmp     #100h,TIMES
         jne     state_follow_4
 
@@ -210,6 +215,7 @@ state_follow_4:
         jmp     state_follow_end
                 
 state_follow_3:     
+        add.w   #370-1,&CCR0            ; pull up 470 period
         bis.b   #RF_TX,&P1OUT           ; RF_TX = 1
         jmp     state_follow_2
         
